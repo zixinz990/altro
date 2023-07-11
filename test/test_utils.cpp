@@ -352,9 +352,9 @@ void QuadrupedQuaternionModel::Dynamics(double *x_dot, const double *x, const do
   Eigen::Map<const Eigen::VectorXd> x_vec(x, 13);
   Eigen::Map<const Eigen::VectorXd> u_vec(u, 12);
 
-  double robot_mass = 13;
+  double robot_mass = 12.84;
   Eigen::Vector3d g_vec;
-  g_vec << 0, 0, -9.81;
+  g_vec << -9.81, 0, 0;
 
   Eigen::Vector3d moment_body;
   moment_body = altro::skew(foot_pos_body.block<3, 1>(0, 0)) * u_vec.segment<3>(0) +
@@ -369,8 +369,7 @@ void QuadrupedQuaternionModel::Dynamics(double *x_dot, const double *x, const do
   // change rate of linear velocity
   x_dot_vec.segment<3>(7) =
       (u_vec.segment<3>(0) + u_vec.segment<3>(3) + u_vec.segment<3>(6) + u_vec.segment<3>(9)) /
-          robot_mass +
-      g_vec;
+          robot_mass + g_vec;
   // change rate of angular velocity
   x_dot_vec.segment<3>(10) =
       inertia_body.inverse() *
@@ -386,7 +385,7 @@ void QuadrupedQuaternionModel::Jacobian(double *jac, const double *x, const doub
 
   Eigen::Map<const Eigen::VectorXd> x_vec(x, 13);
 
-  double robot_mass = 13;
+  double robot_mass = 12.84;
 
   // Calculate dfc_dx
   Eigen::MatrixXd dfc_dx(13, 13);

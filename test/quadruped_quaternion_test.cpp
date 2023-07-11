@@ -153,14 +153,12 @@ TEST(QuadrupedQuatTest, OneMPC) {
     Vector x_ref = Vector::Zero(n);
     Vector u_ref = Vector::Zero(m);
 
-    x_ref << 0.0, 0.0, 0.2,       // position
-             1.0, 0.0, 0.0, 0.0,  // quaternion
-             0.0, 0.0, -0.1,      // linear velocity
-             0.0, 0.0, 0.0;       // angular velocity
-    u_ref << 0.0, 0.0, 13 * 9.81 / 4,
-             0.0, 0.0, 13 * 9.81 / 4,
-             0.0, 0.0, 13 * 9.81 / 4,
-             0.0, 0.0, 13 * 9.81 / 4;
+    x_ref << 0.0, 0.0, 0.2,  // position
+        1.0, 0.0, 0.0, 0.0,  // quaternion
+        0.0, 0.0, -0.1,      // linear velocity
+        0.0, 0.0, 0.0;       // angular velocity
+    u_ref << 0.0, 0.0, 13 * 9.81 / 4, 0.0, 0.0, 13 * 9.81 / 4, 0.0, 0.0, 13 * 9.81 / 4, 0.0, 0.0,
+        13 * 9.81 / 4;
 
     X_ref.emplace_back(x_ref);
     U_ref.emplace_back(u_ref);
@@ -171,10 +169,8 @@ TEST(QuadrupedQuatTest, OneMPC) {
   Eigen::Matrix<double, m, 1> Rd;
 
   double w = 1.0;
-  Qd << 1.0, 1.0, 1.0,
-        0.0, 0.0, 0.0, 0.0,  // ignore quaternion in Q
-        0.1, 0.1, 0.1,
-        0.1, 0.1, 0.1;
+  Qd << 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,  // ignore quaternion in Q
+      0.1, 0.1, 0.1, 0.1, 0.1, 0.1;
 
   Rd << 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6;
 
@@ -254,10 +250,7 @@ TEST(QuadrupedQuatTest, OneMPC) {
                        "friction cone", 0, 10);
 
   Vector x_init = Vector::Zero(n);
-  x_init << 0.0, 0.0, 0.3,
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0,
-            0.0, 0.0, 0.0;
+  x_init << 0.0, 0.0, 0.3, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
   solver.SetInitialState(x_init.data(), n);
   solver.Initialize();
 
@@ -296,6 +289,220 @@ TEST(QuadrupedQuatTest, OneMPC) {
   // Save trajectory to JSON file
   std::filesystem::path test_dir = ALTRO_TEST_DIR;
   std::filesystem::path out_file = test_dir / "quadruped_quaternion_test.json";
+  std::ofstream traj_out(out_file);
+  json X_ref_data(X_ref);
+  json U_ref_data(U_ref);
+  json X_data(X_sim);
+  json U_data(U_sim);
+  json data;
+  data["reference_state"] = X_ref_data;
+  data["reference_input"] = U_ref_data;
+  data["state_trajectory"] = X_data;
+  data["input_trajectory"] = U_data;
+  traj_out << std::setw(4) << data;
+}
+
+TEST(QuadrupedQuatTest, OneSpiderMPC) {
+  auto t_start = std::chrono::high_resolution_clock::now();
+  const int n = QuadrupedQuaternionModel::NumStates;
+  const int en = QuadrupedQuaternionModel::NumErrorStates;
+  const int m = QuadrupedQuaternionModel::NumInputs;
+  const int em = QuadrupedQuaternionModel::NumErrorInputs;
+  const int N = 20;
+  const float h = 0.01;
+  Eigen::Matrix<double, 3, 4> foot_pos_body;
+  Eigen::Matrix<double, 3, 3> inertia_body;
+  foot_pos_body << 0.229346, 0.170965, -0.193752, -0.151814,
+                   0.134608, -0.188767, 0.166271, -0.141375,
+                   -0.255552, 0.259974, 0.260272, -0.260414;
+  inertia_body << 0.0168128557, 0.0, 0.0,
+                  0.0, 0.063009565, 0.0,
+                  0.0, 0.0, 0.0716547275;
+  ALTROSolver solver(N);
+
+  /// REFERENCES ///
+  std::vector<Eigen::VectorXd> X_ref;
+  std::vector<Eigen::VectorXd> U_ref;
+
+  bool plan_contacts[4] = { false, false, true, true};
+  Vector x_ref = Vector::Zero(n);
+  Vector u_ref = Vector::Zero(m);
+
+  x_ref << 0.0, 0.0, 0.0,       // position
+           0.5, 0.5, -0.5, 0.5, // quaternion
+           0.0, 0.0, 0.0,       // linear velocity
+           0.0, 0.0, 0.0;       // angular velocity
+  u_ref << 0.0, 0.0, 0.0,               // FL
+           0.0, 0.0, 0.0,               // FR
+           62.9802, -104.967, -209.934, // RL
+           62.9802, 104.967, 209.934;   // RR
+
+  for (int i = 0; i <= N; i++) {
+    X_ref.emplace_back(x_ref);
+    U_ref.emplace_back(u_ref);
+  }
+
+  Eigen::Vector3d moment_body;
+  moment_body = altro::skew(foot_pos_body.block<3, 1>(0, 0)) * u_ref.segment<3>(0) +
+                altro::skew(foot_pos_body.block<3, 1>(0, 1)) * u_ref.segment<3>(3) +
+                altro::skew(foot_pos_body.block<3, 1>(0, 2)) * u_ref.segment<3>(6) +
+                altro::skew(foot_pos_body.block<3, 1>(0, 3)) * u_ref.segment<3>(9);
+  std::cout << moment_body << std::endl;
+
+  /// OBJECTIVE ///
+  Eigen::Matrix<double, n, 1> Qd;
+  Eigen::Matrix<double, m, 1> Rd;
+
+  double w = 1.0;
+  Qd << 1.0, 1.0, 1.0,
+        0.0, 0.0, 0.0, 0.0, // ignore quaternion in Q
+        0.1, 0.1, 0.1,
+        0.1, 0.1, 0.1;
+  Rd << 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4;
+
+  /// DYNAMICS ///
+  auto model_ptr = std::make_shared<QuadrupedQuaternionModel>();
+  ContinuousDynamicsFunction ct_dyn = [model_ptr, foot_pos_body, inertia_body](
+                                          double *x_dot, const double *x, const double *u) {
+    model_ptr->Dynamics(x_dot, x, u, foot_pos_body, inertia_body);
+  };
+  ContinuousDynamicsJacobian ct_jac = [model_ptr, foot_pos_body, inertia_body](
+                                          double *jac, const double *x, const double *u) {
+    model_ptr->Jacobian(jac, x, u, foot_pos_body, inertia_body);
+  };
+  ExplicitDynamicsFunction dt_dyn = ForwardEulerDynamics(n, m, ct_dyn);
+  ExplicitDynamicsJacobian dt_jac = ForwardEulerJacobian(n, m, ct_dyn, ct_jac);
+
+  /// CONSTRAINTS ///
+  float mu = 0.7;
+  float fz_max = 1000;
+  Eigen::Matrix<a_float, 6, 3> C_mat_1;
+  Eigen::Matrix<a_float, 6, 3> C_mat_2;
+  C_mat_1 << 1, 0, -mu,  //  fx <= mu*fz
+             -1, 0, -mu, // -fx <= mu*fz
+             0, 1, -mu,  //  fy <= mu*fz
+             0, -1, -mu, // -fy <= mu*fz
+             0, 0, 1,    //  fz <= fz_max
+             0, 0, -1;   // -fz <= 0
+
+  C_mat_2 << 1, 0, mu,  //  fx <= -mu*fz
+             -1, 0, mu, // -fx <= -mu*fz
+             0, 1, mu,  //  fy <= -mu*fz
+             0, -1, mu, // -fy <= -mu*fz
+             0, 0, -1,  // -fz <= fz_max
+             0, 0, 1;   //  fz <= 0
+
+  auto friction_cone_con = [&](a_float *c, const a_float *x,
+                                                          const a_float *u) {
+    (void)x;
+    Eigen::Map<Eigen::Matrix<a_float, 24, 1>> C(c);
+    Eigen::Map<const Eigen::VectorXd> u_vec(u, 12);
+    C.setZero();
+    for (int i = 0; i < 4; i++) {
+      Eigen::Matrix<a_float, 6, 1> b_vec;
+      if (plan_contacts[i]) b_vec << 0, 0, 0, 0, -fz_max, 0;
+      else b_vec << 0, 0, 0, 0, 0, 0;
+
+      if (i == 0 || i == 3) {
+        // FL or RR, fz must be positive
+        C.segment<6>(i * 6) = C_mat_1 * u_vec.segment<3>(i * 3) + b_vec;
+      } else if (i == 1 || i == 2) {
+        // FR or RL, fz should be negative
+        C.segment<6>(i * 6) = C_mat_2 * u_vec.segment<3>(i * 3) + b_vec;
+      }
+    }
+  };
+
+  // The number of columns of the constraint Jacobian should be n-1+m if using quaternion!
+  auto friction_cone_jac = [&](a_float *jac, const a_float *x, const a_float *u) {
+    (void)x;
+    (void)u;
+    Eigen::Map<Eigen::Matrix<a_float, 24, 24>> J(jac);
+    J.setZero();
+
+    // Spider man demo
+    for (int i = 0; i < 4; i++) {
+      if (i == 0 || i == 3) {
+        J.block<6, 3>(i * 6, 12 + i * 3) = C_mat_1;
+      } else if (i == 1 || i == 2) {
+        J.block<6, 3>(i * 6, 12 + i * 3) = C_mat_2;
+      }
+    }
+  };
+
+  /// SETUP ///
+  AltroOptions opts;
+  opts.verbose = Verbosity::Inner;
+  opts.iterations_max = 80;
+  opts.use_backtracking_linesearch = true;
+  opts.use_quaternion = true;
+  opts.quat_start_index = 3;  // THIS IS VERY IMPORTANT!
+  solver.SetOptions(opts);
+
+  solver.SetDimension(n, m);
+  solver.SetErrorDimension(en, em);
+  solver.SetExplicitDynamics(dt_dyn, dt_jac);
+  solver.SetTimeStep(h);
+
+  // Cost function
+  for (int i = 0; i <= N; i++) {
+    solver.SetQuaternionCost(n, m, Qd.data(), Rd.data(), w, X_ref.at(i).data(), U_ref.at(i).data(),
+                             i, 0);
+  }
+
+  // Try setting constraints for the first 10 knot points
+  solver.SetConstraint(friction_cone_con, friction_cone_jac, 24, ConstraintType::INEQUALITY,
+                       "friction cone", 0, N + 1);
+//  solver.SetConstraint(friction_cone_con, friction_cone_jac, 3, ConstraintType::EQUALITY,
+//                       "friction cone", 0, N + 1);
+
+  Vector x_init = Vector::Zero(n);
+//  x_init << 0.0, 0.0, 0.0,
+//            0, -0.7071068, 0, 0.7071068,
+//            0.0, 0.0, 0.0,
+//            0.0, 0.0, 0.0;
+  x_init << 0, 0, 0,
+            0.499987, 0.499996, -0.499981, 0.500036,
+            0.0166183, 0.00709, -0.0085014,
+            0.153842, 0.130482, 0.111984;
+  solver.SetInitialState(x_init.data(), n);
+  solver.Initialize();
+
+  // Initial guesses
+  for (int i = 0; i <= N; i++) {
+    solver.SetState(X_ref.at(i).data(), n, i);
+  }
+  solver.SetInput(U_ref.at(0).data(), m);
+
+  /// SOLVE ///
+  fmt::print("#############################################\n");
+  fmt::print("                 MPC Solve\n");
+  fmt::print("#############################################\n");
+
+  solver.Solve();
+  auto t_end = std::chrono::high_resolution_clock::now();
+  using SecondsDouble = std::chrono::duration<double, std::ratio<1>>;
+  SecondsDouble t_total = std::chrono::duration_cast<SecondsDouble>(t_end - t_start);
+  fmt::print("Total time = {} ms\n", t_total * 1000);
+
+  /// SAVE ///
+  std::vector<Vector> X_sim;
+  std::vector<Vector> U_sim;
+
+  for (int k = 0; k <= N; k++) {
+    Eigen::VectorXd x(n);
+    solver.GetState(x.data(), k);
+    X_sim.emplace_back(x);
+    if (k != N) {
+      Eigen::VectorXd u(m);
+      solver.GetInput(u.data(), k);
+      U_sim.emplace_back(u);
+    }
+  }
+
+  // Save trajectory to JSON file
+  std::filesystem::path test_dir = ALTRO_TEST_DIR;
+  std::filesystem::path out_file = test_dir / "quadruped_quaternion_test_spider.json";
   std::ofstream traj_out(out_file);
   json X_ref_data(X_ref);
   json U_ref_data(U_ref);
