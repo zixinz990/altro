@@ -46,9 +46,6 @@ class ALTROSolver {
    */
   ErrorCodes SetDimension(int num_states, int num_inputs, int k_start = AllIndices, int k_stop = 0);
 
-  ErrorCodes SetErrorDimension(int num_error_states, int num_error_inputs, int k_start = AllIndices,
-                               int k_stop = 0);
-
   /**
    * @brief Set the time step between knot point index `k` and `k + 1`.
    * @param h Time step

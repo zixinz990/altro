@@ -77,9 +77,7 @@ TEST(SimpleQuaternionTrackTest, SLERP) {
 TEST(SimpleQuaternionTrackTest, OneMPC) {
   auto t_start = std::chrono::high_resolution_clock::now();
   const int n = SimpleQuaternionModel::NumStates;
-  const int en = SimpleQuaternionModel::NumErrorStates;
   const int m = SimpleQuaternionModel::NumInputs;
-  const int em = SimpleQuaternionModel::NumErrorInputs;
   const int N = 100;
   const float h = 0.01;
   ALTROSolver solver(N);
@@ -132,7 +130,7 @@ TEST(SimpleQuaternionTrackTest, OneMPC) {
   solver.SetOptions(opts);
 
   solver.SetDimension(n, m);
-  solver.SetErrorDimension(en, em);
+//  solver.SetErrorDimension(en, em);
   solver.SetExplicitDynamics(dt_dyn, dt_jac);
   solver.SetTimeStep(h);
 

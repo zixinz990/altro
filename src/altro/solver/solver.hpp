@@ -55,7 +55,6 @@ class SolverImpl {
   std::vector<int> nx_;   // number of states
   std::vector<int> nu_;   // number of inputs
   std::vector<int> nx_error_;   // number of error states
-  std::vector<int> nu_error_;   // number of error inputs
   std::vector<float> h_;  // time steps
   Vector initial_state_;
 

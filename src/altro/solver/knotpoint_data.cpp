@@ -42,27 +42,6 @@ ErrorCodes KnotPointData::SetDimension(int num_states, int num_inputs) {
   return ErrorCodes::NoError;
 }
 
-ErrorCodes KnotPointData::SetErrorDimension(int num_error_states, int num_error_inputs) {
-  if (num_error_states <= 0) {
-    return ALTRO_THROW(
-        fmt::format("Error state dimension must be specified at index {}", knot_point_index_),
-        ErrorCodes::ErrorStateDimUnknown);
-  }
-  if (num_error_inputs <= 0) {
-    std::string msg;
-    if (IsTerminalKnotPoint()) {
-      msg = fmt::format("Error input dimension must also be specified at the terminal knot point.");
-    } else {
-      msg = fmt::format("Error input dimension must be specified at index {}", knot_point_index_);
-    }
-    return ALTRO_THROW(msg, ErrorCodes::ErrorInputDimUnknown);
-  }
-  num_error_states_ = num_error_states;
-  num_error_inputs_ = num_error_inputs;
-  error_dims_are_set_ = true;
-  return ErrorCodes::NoError;
-}
-
 ErrorCodes KnotPointData::SetNextStateDimension(int num_states_next) {
   if (IsTerminalKnotPoint()) {
     return ErrorCodes::InvalidOptAtTerminalKnotPoint;
@@ -283,8 +262,8 @@ ErrorCodes KnotPointData::Initialize() {
   const int n2 = GetNextStateDim();
   const int n = GetStateDim();
   const int m = GetInputDim();
-  const int en = GetErrorStateDim();
-  const int em = GetErrorInputDim();
+  const int en = n - 1;
+  const int em = m;
   const float h = GetTimeStep();
   bool is_terminal = IsTerminalKnotPoint();
 

@@ -47,24 +47,6 @@ ErrorCodes ALTROSolver::SetDimension(int num_states, int num_inputs, int k_start
   return ErrorCodes::NoError;
 }
 
-ErrorCodes ALTROSolver::SetErrorDimension(int num_error_states, int num_error_inputs, int k_start,
-                                          int k_stop) {
-  if (IsInitialized()) {
-    return ALTRO_THROW("Cannot change the error dimension once the solver has been initialized.",
-                       ErrorCodes::SolverAlreadyInitialized);
-  }
-  ErrorCodes err = CheckKnotPointIndices(k_start, k_stop, LastIndexMode::Inclusive);
-  if (err != ErrorCodes::NoError) return err;
-  if (num_error_states <= 0) return ErrorCodes::ErrorStateDimUnknown;
-  for (int k = k_start; k < k_stop; ++k) {
-    solver_->nx_error_[k] = num_error_states;
-    solver_->nu_error_[k] = num_error_inputs;
-    err = solver_->data_[k].SetErrorDimension(num_error_states, num_error_inputs);
-    if (err != ErrorCodes::NoError) return err;
-  }
-  return ErrorCodes::NoError;
-}
-
 ErrorCodes ALTROSolver::SetTimeStep(float h, int k_start, int k_stop) {
   ErrorCodes err = CheckKnotPointIndices(k_start, k_stop, LastIndexMode::Exclusive);
   if (err != ErrorCodes::NoError) return err;

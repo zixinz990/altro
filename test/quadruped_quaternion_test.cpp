@@ -23,142 +23,45 @@ using json = nlohmann::json;
 
 using namespace altro;
 
-TEST(QuadrupedQuatTest, Dynamics) {
-  int n = QuadrupedQuaternionModel::NumStates;
-  int m = QuadrupedQuaternionModel::NumInputs;
-  float h = 0.01;
-  Vector x_dot(n);
-  Vector x(n);
-  Vector u(m);
-  Eigen::Matrix<double, 3, 4> foot_pos_body;
-  Eigen::Matrix<double, 3, 3> inertia_body;
-
-  x << 0.1, 0.2, 0.3, 0.9180331, 0.073467, 0.0638159, 0.3843767, 0.1, 0.2, -0.1, 0.1, 0.2, 0.3;
-  u << 0, 0, 13 * 9.81 / 4 - 5, 0, 0, 13 * 9.81 / 4 - 10, 0, 0, 13 * 9.81 / 4 + 10, 0, 0,
-      13 * 9.81 / 4 + 15;
-  foot_pos_body << 0.17, 0.17, -0.17, -0.17, 0.13, -0.13, 0.13, -0.13, -0.3, -0.3, -0.3, -0.3;
-  inertia_body << 0.0158533, 0.0, 0.0, 0.0, 0.0377999, 0.0, 0.0, 0.0, 0.0456542;
-
-  auto model_ptr = std::make_shared<QuadrupedQuaternionModel>();
-  ContinuousDynamicsFunction ct_dyn = [model_ptr, foot_pos_body, inertia_body](
-                                          double *x_dot, const double *x, const double *u) {
-    model_ptr->Dynamics(x_dot, x, u, foot_pos_body, inertia_body);
-  };
-  ContinuousDynamicsJacobian ct_jac = [model_ptr, foot_pos_body, inertia_body](
-                                          double *jac, const double *x, const double *u) {
-    model_ptr->Jacobian(jac, x, u, foot_pos_body, inertia_body);
-  };
-  auto dt_dyn = MidpointDynamics(n, m, ct_dyn);
-  auto dt_jac = MidpointJacobian(n, m, ct_dyn, ct_jac);
-
-  // Continuous dynamics
-  Vector x_dot_expected(n);
-  x_dot_expected << 0.1000, 0.2000, -0.1000, -0.0677, 0.0170, 0.1000, 0.1419, 0, 0, 0.7692, -0.0297,
-      179.9183, -0.0096;
-  ct_dyn(x_dot.data(), x.data(), u.data());
-  Vector x_dot_err = x_dot - x_dot_expected;
-  for (int i = 0; i < n; i++) {
-    EXPECT_LT(x_dot_err[i], 1e-4);
-  }
-
-  // Continuous Jacobian
-  MatrixXd ct_jac_(n, n + m);
-  MatrixXd ct_jac_expected(n, n + m);
-  ct_jac_expected << 0, 0, 0, 0, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -0.0500, -0.1000,
-      -0.1500, 0, 0, 0, -0.0367, -0.0319, -0.1922, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0.0500, 0, 0.1500, -0.1000, 0, 0, 0, 0.4590, -0.1922, 0.0319, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0.1000, -0.1500, 0, 0.0500, 0, 0, 0, 0.1922, 0.4590, -0.0367, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 0.1500, 0.1000, -0.0500, 0, 0, 0, 0, -0.0319, 0.0367, 0.4590, 0, 0, 0,
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0769, 0, 0, 0.0769, 0, 0,
-      0.0769, 0, 0, 0.0769, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0769, 0, 0, 0.0769, 0,
-      0, 0.0769, 0, 0, 0.0769, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0769, 0, 0, 0.0769,
-      0, 0, 0.0769, 0, 0, 0.0769, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -0.1486, -0.0991, 0, 18.9235,
-      8.2002, 0, 18.9235, -8.2002, 0, 18.9235, 8.2002, 0, 18.9235, -8.2002, 0, 0, 0, 0, 0, 0, 0, 0,
-      0, 0, 0.2365, 0, 0.0788, -7.9365, 0, -4.4974, -7.9365, 0, -4.4974, -7.9365, 0, 4.4974,
-      -7.9365, 0, 4.4974, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -0.0961, -0.0481, 0, -2.8475, 3.7236, 0,
-      2.8475, 3.7236, 0, -2.8475, -3.7236, 0, 2.8475, -3.7236, 0;
-  ct_jac(ct_jac_.data(), x.data(), u.data());
-  MatrixXd ct_jac_err = ct_jac_ - ct_jac_expected;
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n + m; j++) {
-      EXPECT_LT(ct_jac_err(i, j), 1e-4);
-    }
-  }
-
-  // Midpoint discrete dynamics
-  Vector x_next = Vector::Zero(n);
-  Vector x_next_expected = Vector::Zero(n);
-  dt_dyn(x_next.data(), x.data(), u.data(), h);
-  x_next_expected << 0.1010, 0.2020, 0.2990, 0.9171, 0.0719, 0.0689, 0.3861, 0.1000, 0.2000,
-      -0.0923, 0.0984, 1.9992, 0.2995;
-  Vector x_next_err = x_next - x_next_expected;
-  for (int i = 0; i < n; i++) {
-    EXPECT_LT(x_next_err[i], 1e-4);
-  }
-
-  // Midpoint discrete dynamics Jacobian
-  MatrixXd dt_jac_(n, n + m);
-  MatrixXd dt_jac_expected(n, n + m);
-  dt_jac_expected << 1.0000, 0, 0, 0, 0, 0, 0, 0.0100, 0, 0, 0, 0, 0, 0.0000, 0, 0, 0.0000, 0, 0,
-      0.0000, 0, 0, 0.0000, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0, 0, 0.0100, 0, 0, 0, 0, 0, 0.0000, 0, 0,
-      0.0000, 0, 0, 0.0000, 0, 0, 0.0000, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0, 0, 0.0100, 0, 0, 0, 0, 0,
-      0.0000, 0, 0, 0.0000, 0, 0, 0.0000, 0, 0, 0.0000, 0, 0, 0, 1.0000, -0.0005, -0.0055, -0.0015,
-      0, 0, 0, -0.0004, -0.0003, -0.0019, 0.0000, -0.0001, -0.0000, -0.0000, -0.0001, 0.0000,
-      0.0000, 0.0000, -0.0000, -0.0000, 0.0000, 0.0000, 0, 0, 0, 0.0005, 1.0000, 0.0015, -0.0055, 0,
-      0, 0, 0.0046, -0.0019, 0.0003, 0.0001, 0.0004, 0.0002, 0.0001, 0.0004, -0.0001, 0.0001,
-      0.0004, 0.0001, 0.0001, 0.0004, -0.0002, 0, 0, 0, 0.0055, -0.0015, 1.0000, 0.0005, 0, 0, 0,
-      0.0019, 0.0046, -0.0004, -0.0002, 0.0002, -0.0000, -0.0002, 0.0002, -0.0002, -0.0002, 0.0002,
-      0.0002, -0.0002, 0.0002, 0.0000, 0, 0, 0, 0.0015, 0.0055, -0.0005, 1.0000, 0, 0, 0, -0.0003,
-      0.0004, 0.0046, -0.0001, 0.0001, -0.0000, 0.0001, 0.0001, 0.0000, -0.0001, -0.0001, -0.0000,
-      0.0001, -0.0001, 0.0000, 0, 0, 0, 0, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0, 0.0008, 0, 0, 0.0008, 0,
-      0, 0.0008, 0, 0, 0.0008, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0, 0.0008, 0, 0,
-      0.0008, 0, 0, 0.0008, 0, 0, 0.0008, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0000, 0, 0, 0, 0, 0,
-      0.0008, 0, 0, 0.0008, 0, 0, 0.0008, 0, 0, 0.0008, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1.0000,
-      -0.0015, -0.0054, 0.0001, 0.1891, 0.0820, -0.0000, 0.1891, -0.0820, 0.0001, 0.1893, 0.0820,
-      -0.0000, 0.1893, -0.0820, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.0024, 1.0000, 0.0008, -0.0794,
-      0.0002, -0.0449, -0.0794, 0.0002, -0.0451, -0.0794, 0.0002, 0.0451, -0.0794, 0.0002, 0.0449,
-      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -0.0053, -0.0005, 1.0000, -0.0285, 0.0367, -0.0002, 0.0285,
-      0.0367, 0.0002, -0.0285, -0.0377, -0.0002, 0.0285, -0.0377, 0.0002;
-  dt_jac(dt_jac_.data(), x.data(), u.data(), h);
-  MatrixXd dt_jac_err = dt_jac_ - dt_jac_expected;
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < n + m; j++) {
-      EXPECT_LT(dt_jac_err(i, j), 1e-4);
-    }
-  }
-}
-
 TEST(QuadrupedQuatTest, OneMPC) {
   auto t_start = std::chrono::high_resolution_clock::now();
   const int n = QuadrupedQuaternionModel::NumStates;
-  const int en = QuadrupedQuaternionModel::NumErrorStates;
   const int m = QuadrupedQuaternionModel::NumInputs;
-  const int em = QuadrupedQuaternionModel::NumErrorInputs;
-  const int N = 30;
+  const int N = 20;
   const float h = 0.01;
   Eigen::Matrix<double, 3, 4> foot_pos_body;
-  Eigen::Matrix<double, 3, 3> inertia_body;
-  foot_pos_body << 0.17, 0.17, -0.17, -0.17, 0.13, -0.13, 0.13, -0.13, -0.3, -0.3, -0.3, -0.3;
-  inertia_body << 0.0158533, 0.0, 0.0, 0.0, 0.0377999, 0.0, 0.0, 0.0, 0.0456542;
+  Eigen::Matrix<double, 3, 3> body_inertia;
+  foot_pos_body << 0.17, 0.17, -0.17, -0.17,
+                   0.13, -0.13, 0.13, -0.13,
+                   -0.3, -0.3, -0.3, -0.3;
+  body_inertia << 0.0168128557, 0.0, 0.0,
+                  0.0, 0.063009565, 0.0,
+                  0.0, 0.0, 0.0716547275;
+  double robot_mass = 12.84;
+  double body_mass = 5.204;
+  Eigen::Matrix3d robot_inertia = (robot_mass / body_mass) * body_inertia;
+
   ALTROSolver solver(N);
 
   /// REFERENCES ///
+  double contacts[4] = {1.0, 0.0, 0.0, 1.0};
+  double num_contacts = 2;
+
   std::vector<Eigen::VectorXd> X_ref;
   std::vector<Eigen::VectorXd> U_ref;
-  float contacts[4] = {0.0, 1.0, 1.0, 0.0};  // FL, FR, RL, RR
 
   for (int i = 0; i <= N; i++) {
     Vector x_ref = Vector::Zero(n);
     Vector u_ref = Vector::Zero(m);
 
-    x_ref << 0.0, 0.0, 0.2,  // position
-        1.0, 0.0, 0.0, 0.0,  // quaternion
-        0.0, 0.0, -0.1,      // linear velocity
-        0.0, 0.0, 0.0;       // angular velocity
-    u_ref << 0.0, 0.0, 13 * 9.81 / 4, 0.0, 0.0, 13 * 9.81 / 4, 0.0, 0.0, 13 * 9.81 / 4, 0.0, 0.0,
-        13 * 9.81 / 4;
+    x_ref << 0.5*0.5*(h*i)*(h*i), 0.0, 0.0,
+             1.0, 0.0, 0.0, 0.0,
+             0.5*h*i, 0.0, 0.0,
+             0.0, 0.0, 0.0;
+    u_ref << 0.0, 0.0, contacts[0] * robot_mass * 9.81 / num_contacts,
+             0.0, 0.0, contacts[1] * robot_mass * 9.81 / num_contacts,
+             0.0, 0.0, contacts[2] * robot_mass * 9.81 / num_contacts,
+             0.0, 0.0, contacts[3] * robot_mass * 9.81 / num_contacts;
 
     X_ref.emplace_back(x_ref);
     U_ref.emplace_back(u_ref);
@@ -168,30 +71,31 @@ TEST(QuadrupedQuatTest, OneMPC) {
   Eigen::Matrix<double, n, 1> Qd;
   Eigen::Matrix<double, m, 1> Rd;
 
-  double w = 1.0;
-  Qd << 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0,  // ignore quaternion in Q
-      0.1, 0.1, 0.1, 0.1, 0.1, 0.1;
+  double w = 10.0;
+  Qd << 1.0, 1.0, 1.0,
+        0.0, 0.0, 0.0, 0.0,  // ignore quaternion in Q
+        0.1, 0.1, 0.1,
+        0.1, 0.1, 0.1;
 
   Rd << 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6;
 
   /// DYNAMICS ///
   auto model_ptr = std::make_shared<QuadrupedQuaternionModel>();
-  ContinuousDynamicsFunction ct_dyn = [model_ptr, foot_pos_body, inertia_body](
+  ContinuousDynamicsFunction ct_dyn = [model_ptr, foot_pos_body, robot_inertia, robot_mass](
                                           double *x_dot, const double *x, const double *u) {
-    model_ptr->Dynamics(x_dot, x, u, foot_pos_body, inertia_body);
+    model_ptr->Dynamics(x_dot, x, u, foot_pos_body, robot_inertia, robot_mass);
   };
-  ContinuousDynamicsJacobian ct_jac = [model_ptr, foot_pos_body, inertia_body](
+  ContinuousDynamicsJacobian ct_jac = [model_ptr, foot_pos_body, robot_inertia, robot_mass](
                                           double *jac, const double *x, const double *u) {
-    model_ptr->Jacobian(jac, x, u, foot_pos_body, inertia_body);
+    model_ptr->Jacobian(jac, x, u, foot_pos_body, robot_inertia, robot_mass);
   };
   ExplicitDynamicsFunction dt_dyn = ForwardEulerDynamics(n, m, ct_dyn);
   ExplicitDynamicsJacobian dt_jac = ForwardEulerJacobian(n, m, ct_dyn, ct_jac);
 
   /// CONSTRAINTS ///
-  float mu = 0.7;
-  float fz_max = 666;
-  float fz_min = 5;
-  auto friction_cone_con = [contacts, mu, fz_max, fz_min](a_float *c, const a_float *x,
+  float mu = 0.6;
+  float fz_max = 200;
+  auto friction_cone_con = [mu, fz_max, contacts](a_float *c, const a_float *x,
                                                           const a_float *u) {
     (void)x;
     for (int i = 0; i < 4; i++) {
@@ -200,7 +104,7 @@ TEST(QuadrupedQuatTest, OneMPC) {
       c[2 + i * 6] = u[1 + i * 3] - mu * u[2 + i * 3];      // fy - mu*fz <= 0
       c[3 + i * 6] = -u[1 + i * 3] - mu * u[2 + i * 3];     // -fy - mu*fz <= 0
       c[4 + i * 6] = u[2 + i * 3] - fz_max * contacts[i];   // fz <= fz_max
-      c[5 + i * 6] = -u[2 + i * 3] + fz_min * contacts[i];  // -fz + 5 <= 0
+      c[5 + i * 6] = -u[2 + i * 3];  // -fz + 5 <= 0
     }
   };
 
@@ -232,10 +136,12 @@ TEST(QuadrupedQuatTest, OneMPC) {
   opts.use_backtracking_linesearch = true;
   opts.use_quaternion = true;
   opts.quat_start_index = 3;  // THIS IS VERY IMPORTANT!
+  opts.tol_meritfun_gradient = 1e-8;
+  opts.tol_primal_feasibility = 1e-3;
+  opts.tol_stationarity = 1e-3;
   solver.SetOptions(opts);
 
   solver.SetDimension(n, m);
-  solver.SetErrorDimension(en, em);
   solver.SetExplicitDynamics(dt_dyn, dt_jac);
   solver.SetTimeStep(h);
 
@@ -250,7 +156,7 @@ TEST(QuadrupedQuatTest, OneMPC) {
                        "friction cone", 0, 10);
 
   Vector x_init = Vector::Zero(n);
-  x_init << 0.0, 0.0, 0.3, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
+  x_init << 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
   solver.SetInitialState(x_init.data(), n);
   solver.Initialize();
 
@@ -302,145 +208,125 @@ TEST(QuadrupedQuatTest, OneMPC) {
   traj_out << std::setw(4) << data;
 }
 
-TEST(QuadrupedQuatTest, OneSpiderMPC) {
+TEST(QuadrupedQuatTest, TrotMPC) {
   auto t_start = std::chrono::high_resolution_clock::now();
-  const int n = QuadrupedQuaternionModel::NumStates;
-  const int en = QuadrupedQuaternionModel::NumErrorStates;
-  const int m = QuadrupedQuaternionModel::NumInputs;
-  const int em = QuadrupedQuaternionModel::NumErrorInputs;
+
+  const int n = QuadrupedTrotQuaternionModel::NumStates;
+  const int m = QuadrupedTrotQuaternionModel::NumInputs;
   const int N = 20;
   const float h = 0.01;
-  Eigen::Matrix<double, 3, 4> foot_pos_body;
-  Eigen::Matrix<double, 3, 3> inertia_body;
-  foot_pos_body << 0.229346, 0.170965, -0.193752, -0.151814,
-                   0.134608, -0.188767, 0.166271, -0.141375,
-                   -0.255552, 0.259974, 0.260272, -0.260414;
-  inertia_body << 0.0168128557, 0.0, 0.0,
+
+  Eigen::Matrix<double, 3, 2> foot_pos_body;
+  Eigen::Matrix<double, 3, 3> body_inertia;
+  foot_pos_body << 0.17, -0.17,
+                   0.13, -0.13,
+                   -0.3, -0.3;
+  body_inertia << 0.0168128557, 0.0, 0.0,
                   0.0, 0.063009565, 0.0,
                   0.0, 0.0, 0.0716547275;
+  double robot_mass = 12.84;
+  double body_mass = 5.204;
+  Eigen::Matrix3d robot_inertia = (robot_mass / body_mass) * body_inertia;
+
   ALTROSolver solver(N);
 
   /// REFERENCES ///
+  double num_contacts = 2;
+
   std::vector<Eigen::VectorXd> X_ref;
   std::vector<Eigen::VectorXd> U_ref;
 
-  bool plan_contacts[4] = { false, false, true, true};
-  Vector x_ref = Vector::Zero(n);
-  Vector u_ref = Vector::Zero(m);
-
-  x_ref << 0.0, 0.0, 0.0,       // position
-           0.5, 0.5, -0.5, 0.5, // quaternion
-           0.0, 0.0, 0.0,       // linear velocity
-           0.0, 0.0, 0.0;       // angular velocity
-  u_ref << 0.0, 0.0, 0.0,               // FL
-           0.0, 0.0, 0.0,               // FR
-           62.9802, -104.967, -209.934, // RL
-           62.9802, 104.967, 209.934;   // RR
-
   for (int i = 0; i <= N; i++) {
+    Vector x_ref = Vector::Zero(n);
+    Vector u_ref = Vector::Zero(m);
+
+    x_ref << 0.0, 0.0, 0.0, // position
+             1.0, 0.0, 0.0, 0.0,            // quaternion
+             0.5*h*i, 0.0, 0.0,             // linear velocity
+             0.0, 0.0, 0.0;                 // angular velocity
+    x_ref[0] += 0.5*h*i*h;
+    u_ref << 0.0, 0.0, robot_mass * 9.81 / num_contacts,
+             0.0, 0.0, robot_mass * 9.81 / num_contacts;
+
     X_ref.emplace_back(x_ref);
     U_ref.emplace_back(u_ref);
   }
-
-  Eigen::Vector3d moment_body;
-  moment_body = altro::skew(foot_pos_body.block<3, 1>(0, 0)) * u_ref.segment<3>(0) +
-                altro::skew(foot_pos_body.block<3, 1>(0, 1)) * u_ref.segment<3>(3) +
-                altro::skew(foot_pos_body.block<3, 1>(0, 2)) * u_ref.segment<3>(6) +
-                altro::skew(foot_pos_body.block<3, 1>(0, 3)) * u_ref.segment<3>(9);
-  std::cout << moment_body << std::endl;
 
   /// OBJECTIVE ///
   Eigen::Matrix<double, n, 1> Qd;
   Eigen::Matrix<double, m, 1> Rd;
 
-  double w = 1.0;
+  double w = 10.0;
   Qd << 1.0, 1.0, 1.0,
-        0.0, 0.0, 0.0, 0.0, // ignore quaternion in Q
-        0.1, 0.1, 0.1,
-        0.1, 0.1, 0.1;
-  Rd << 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4, 1e-4;
+        0.0, 0.0, 0.0, 0.0,  // ignore quaternion in Q
+        10.0, 10.0, 10.0,
+        10.0, 10.0, 10.0;
+
+  Rd << 1e-6, 1e-6, 1e-6, 1e-6, 1e-6, 1e-6;
 
   /// DYNAMICS ///
-  auto model_ptr = std::make_shared<QuadrupedQuaternionModel>();
-  ContinuousDynamicsFunction ct_dyn = [model_ptr, foot_pos_body, inertia_body](
+  auto model_ptr = std::make_shared<QuadrupedTrotQuaternionModel>();
+  ContinuousDynamicsFunction ct_dyn = [model_ptr, foot_pos_body, robot_inertia, robot_mass](
                                           double *x_dot, const double *x, const double *u) {
-    model_ptr->Dynamics(x_dot, x, u, foot_pos_body, inertia_body);
+    model_ptr->TrotDynamics(x_dot, x, u, foot_pos_body, robot_inertia, robot_mass);
   };
-  ContinuousDynamicsJacobian ct_jac = [model_ptr, foot_pos_body, inertia_body](
+  ContinuousDynamicsJacobian ct_jac = [model_ptr, foot_pos_body, robot_inertia, robot_mass](
                                           double *jac, const double *x, const double *u) {
-    model_ptr->Jacobian(jac, x, u, foot_pos_body, inertia_body);
+    model_ptr->TrotJacobian(jac, x, u, foot_pos_body, robot_inertia, robot_mass);
   };
   ExplicitDynamicsFunction dt_dyn = ForwardEulerDynamics(n, m, ct_dyn);
   ExplicitDynamicsJacobian dt_jac = ForwardEulerJacobian(n, m, ct_dyn, ct_jac);
 
   /// CONSTRAINTS ///
   float mu = 0.7;
-  float fz_max = 1000;
-  Eigen::Matrix<a_float, 6, 3> C_mat_1;
-  Eigen::Matrix<a_float, 6, 3> C_mat_2;
-  C_mat_1 << 1, 0, -mu,  //  fx <= mu*fz
-             -1, 0, -mu, // -fx <= mu*fz
-             0, 1, -mu,  //  fy <= mu*fz
-             0, -1, -mu, // -fy <= mu*fz
-             0, 0, 1,    //  fz <= fz_max
-             0, 0, -1;   // -fz <= 0
-
-  C_mat_2 << 1, 0, mu,  //  fx <= -mu*fz
-             -1, 0, mu, // -fx <= -mu*fz
-             0, 1, mu,  //  fy <= -mu*fz
-             0, -1, mu, // -fy <= -mu*fz
-             0, 0, -1,  // -fz <= fz_max
-             0, 0, 1;   //  fz <= 0
-
-  auto friction_cone_con = [&](a_float *c, const a_float *x,
-                                                          const a_float *u) {
+  float fz_max = 200;
+  auto friction_cone_con = [mu, fz_max](a_float *c, const a_float *x,
+                                                  const a_float *u) {
     (void)x;
-    Eigen::Map<Eigen::Matrix<a_float, 24, 1>> C(c);
-    Eigen::Map<const Eigen::VectorXd> u_vec(u, 12);
-    C.setZero();
-    for (int i = 0; i < 4; i++) {
-      Eigen::Matrix<a_float, 6, 1> b_vec;
-      if (plan_contacts[i]) b_vec << 0, 0, 0, 0, -fz_max, 0;
-      else b_vec << 0, 0, 0, 0, 0, 0;
-
-      if (i == 0 || i == 3) {
-        // FL or RR, fz must be positive
-        C.segment<6>(i * 6) = C_mat_1 * u_vec.segment<3>(i * 3) + b_vec;
-      } else if (i == 1 || i == 2) {
-        // FR or RL, fz should be negative
-        C.segment<6>(i * 6) = C_mat_2 * u_vec.segment<3>(i * 3) + b_vec;
-      }
+    for (int i = 0; i < 2; i++) {
+      c[0 + i * 6] = u[0 + i * 3] - mu * u[2 + i * 3];  // fx - mu*fz <= 0
+      c[1 + i * 6] = -u[0 + i * 3] - mu * u[2 + i * 3]; // -fx - mu*fz <= 0
+      c[2 + i * 6] = u[1 + i * 3] - mu * u[2 + i * 3];  // fy - mu*fz <= 0
+      c[3 + i * 6] = -u[1 + i * 3] - mu * u[2 + i * 3]; // -fy - mu*fz <= 0
+      c[4 + i * 6] = u[2 + i * 3] - fz_max;             // fz <= fz_max
+      c[5 + i * 6] = -u[2 + i * 3];                     // -fz + 5 <= 0
     }
   };
 
   // The number of columns of the constraint Jacobian should be n-1+m if using quaternion!
-  auto friction_cone_jac = [&](a_float *jac, const a_float *x, const a_float *u) {
+  auto friction_cone_jac = [mu](a_float *jac, const a_float *x, const a_float *u) {
     (void)x;
     (void)u;
-    Eigen::Map<Eigen::Matrix<a_float, 24, 24>> J(jac);
+    Eigen::Map<Eigen::Matrix<a_float, 12, 13 - 1 + 6>> J(jac);
     J.setZero();
 
-    // Spider man demo
-    for (int i = 0; i < 4; i++) {
-      if (i == 0 || i == 3) {
-        J.block<6, 3>(i * 6, 12 + i * 3) = C_mat_1;
-      } else if (i == 1 || i == 2) {
-        J.block<6, 3>(i * 6, 12 + i * 3) = C_mat_2;
-      }
+    for (int i = 0; i < 2; i++) {
+      J(0 + i * 6, 12 + i * 3) = 1;    // dc0/dfx
+      J(0 + i * 6, 14 + i * 3) = -mu;  // dc0/dfz
+      J(1 + i * 6, 12 + i * 3) = -1;   // dc1/dfx
+      J(1 + i * 6, 14 + i * 3) = -mu;  // dc1/dfz
+      J(2 + i * 6, 13 + i * 3) = 1;    // dc2/dfy
+      J(2 + i * 6, 14 + i * 3) = -mu;  // dc2/dfz
+      J(3 + i * 6, 13 + i * 3) = -1;   // dc3/dfy
+      J(3 + i * 6, 14 + i * 3) = -mu;  // dc3/dfz
+      J(4 + i * 6, 14 + i * 3) = 1;    // dc4/dfz
+      J(5 + i * 6, 14 + i * 3) = -1;   // dc5/dfz
     }
   };
 
   /// SETUP ///
   AltroOptions opts;
   opts.verbose = Verbosity::Inner;
-  opts.iterations_max = 80;
+  opts.iterations_max = 30;
   opts.use_backtracking_linesearch = true;
   opts.use_quaternion = true;
   opts.quat_start_index = 3;  // THIS IS VERY IMPORTANT!
+//  opts.tol_meritfun_gradient = 1e-8;
+//  opts.tol_primal_feasibility = 1e-3;
+//  opts.tol_stationarity = 1e-3;
   solver.SetOptions(opts);
 
   solver.SetDimension(n, m);
-  solver.SetErrorDimension(en, em);
   solver.SetExplicitDynamics(dt_dyn, dt_jac);
   solver.SetTimeStep(h);
 
@@ -451,20 +337,11 @@ TEST(QuadrupedQuatTest, OneSpiderMPC) {
   }
 
   // Try setting constraints for the first 10 knot points
-  solver.SetConstraint(friction_cone_con, friction_cone_jac, 24, ConstraintType::INEQUALITY,
-                       "friction cone", 0, N + 1);
-//  solver.SetConstraint(friction_cone_con, friction_cone_jac, 3, ConstraintType::EQUALITY,
-//                       "friction cone", 0, N + 1);
+  solver.SetConstraint(friction_cone_con, friction_cone_jac, 12, ConstraintType::INEQUALITY,
+                       "friction cone", 0, 10);
 
   Vector x_init = Vector::Zero(n);
-//  x_init << 0.0, 0.0, 0.0,
-//            0, -0.7071068, 0, 0.7071068,
-//            0.0, 0.0, 0.0,
-//            0.0, 0.0, 0.0;
-  x_init << 0, 0, 0,
-            0.499987, 0.499996, -0.499981, 0.500036,
-            0.0166183, 0.00709, -0.0085014,
-            0.153842, 0.130482, 0.111984;
+  x_init << 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0;
   solver.SetInitialState(x_init.data(), n);
   solver.Initialize();
 
@@ -502,7 +379,7 @@ TEST(QuadrupedQuatTest, OneSpiderMPC) {
 
   // Save trajectory to JSON file
   std::filesystem::path test_dir = ALTRO_TEST_DIR;
-  std::filesystem::path out_file = test_dir / "quadruped_quaternion_test_spider.json";
+  std::filesystem::path out_file = test_dir / "trot_quadruped_quaternion_test.json";
   std::ofstream traj_out(out_file);
   json X_ref_data(X_ref);
   json U_ref_data(U_ref);
@@ -514,4 +391,20 @@ TEST(QuadrupedQuatTest, OneSpiderMPC) {
   data["state_trajectory"] = X_data;
   data["input_trajectory"] = U_data;
   traj_out << std::setw(4) << data;
+}
+
+TEST(QuadrupedQuatTest, EigenTest) {
+  Eigen::VectorXd a;
+
+  a.resize(12);
+  a << 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4;
+  std::cout << a.transpose() << std::endl;
+
+  a.resize(6);
+  a << 5, 5, 5, 6, 6, 6;
+  std::cout << a.transpose() << std::endl;
+
+  a.resize(12);
+  a << 7, 7, 7, 8, 8, 8, 9, 9, 9, 0, 0, 0;
+  std::cout << a.transpose() << std::endl;
 }

@@ -347,45 +347,44 @@ void SimpleQuaternionModel::Jacobian(double *jac, const double *x, const double 
 
 void QuadrupedQuaternionModel::Dynamics(double *x_dot, const double *x, const double *u,
                                         Eigen::Matrix<double, 3, 4> foot_pos_body,
-                                        Eigen::Matrix3d inertia_body) const {
+                                        const Eigen::Matrix3d& robot_inertia, double robot_mass) const {
   Eigen::Map<Eigen::VectorXd> x_dot_vec(x_dot, 13);
   Eigen::Map<const Eigen::VectorXd> x_vec(x, 13);
   Eigen::Map<const Eigen::VectorXd> u_vec(u, 12);
 
-  double robot_mass = 12.84;
   Eigen::Vector3d g_vec;
-  g_vec << -9.81, 0, 0;
+  g_vec << 0, 0, -9.81;
+
+  Eigen::Vector3d body_com(0.0223, 0.002, -0.0005);
+  Eigen::Vector3d moment_gravity = body_com.cross(5.204 * g_vec);
 
   Eigen::Vector3d moment_body;
   moment_body = altro::skew(foot_pos_body.block<3, 1>(0, 0)) * u_vec.segment<3>(0) +
                 altro::skew(foot_pos_body.block<3, 1>(0, 1)) * u_vec.segment<3>(3) +
                 altro::skew(foot_pos_body.block<3, 1>(0, 2)) * u_vec.segment<3>(6) +
-                altro::skew(foot_pos_body.block<3, 1>(0, 3)) * u_vec.segment<3>(9);
+                altro::skew(foot_pos_body.block<3, 1>(0, 3)) * u_vec.segment<3>(9) +
+                moment_gravity;
 
   // change rate of position
   x_dot_vec.segment<3>(0) = x_vec.segment<3>(7);
   // change rate of quaternion
   x_dot_vec.segment<4>(3) = 0.5 * altro::G(x_vec.segment<4>(3)) * x_vec.segment<3>(10);
   // change rate of linear velocity
-  x_dot_vec.segment<3>(7) =
-      (u_vec.segment<3>(0) + u_vec.segment<3>(3) + u_vec.segment<3>(6) + u_vec.segment<3>(9)) /
-          robot_mass + g_vec;
+  x_dot_vec.segment<3>(7) = (u_vec.segment<3>(0) + u_vec.segment<3>(3) + u_vec.segment<3>(6) + u_vec.segment<3>(9)) /
+                                  robot_mass + g_vec;
   // change rate of angular velocity
-  x_dot_vec.segment<3>(10) =
-      inertia_body.inverse() *
-      (moment_body - x_vec.segment<3>(10).cross(inertia_body * x_vec.segment<3>(10)));
+  x_dot_vec.segment<3>(10) = robot_inertia.inverse() *
+                                  (moment_body - x_vec.segment<3>(10).cross(robot_inertia * x_vec.segment<3>(10)));
 }
 
 void QuadrupedQuaternionModel::Jacobian(double *jac, const double *x, const double *u,
                                         Eigen::Matrix<double, 3, 4> foot_pos_body,
-                                        Eigen::Matrix3d inertia_body) const {
+                                        const Eigen::Matrix3d& robot_inertia, double robot_mass) const {
   (void)u;
   Eigen::Map<Eigen::Matrix<double, 13, 25>> J(jac);  // jac = [dfc_dx, dfc_du]
   J.setZero();
 
   Eigen::Map<const Eigen::VectorXd> x_vec(x, 13);
-
-  double robot_mass = 12.84;
 
   // Calculate dfc_dx
   Eigen::MatrixXd dfc_dx(13, 13);
@@ -411,8 +410,8 @@ void QuadrupedQuaternionModel::Jacobian(double *jac, const double *x, const doub
   dfc_dx(6, 12) = 0.5 * x_vec(3);   // 0.5qs
   // domegadot/domega
   dfc_dx.block<3, 3>(10, 10) =
-      -inertia_body.inverse() * (altro::skew(x_vec.segment<3>(10)) * inertia_body -
-                                  altro::skew(inertia_body * x_vec.segment<3>(10)));
+      -robot_inertia.inverse() * (altro::skew(x_vec.segment<3>(10)) * robot_inertia -
+                                  altro::skew(robot_inertia * x_vec.segment<3>(10)));
 
   // Calculate dfc_du
   Eigen::MatrixXd dfc_du(13, 12);
@@ -421,12 +420,89 @@ void QuadrupedQuaternionModel::Jacobian(double *jac, const double *x, const doub
   for (int i = 0; i < 4; ++i) {
     dfc_du.block<3, 3>(7, 3 * i) = (1 / robot_mass) * Eigen::Matrix3d::Identity();
     dfc_du.block<3, 3>(10, 3 * i) =
-        inertia_body.inverse() * altro::skew(foot_pos_body.block<3, 1>(0, i));
+        robot_inertia.inverse() * altro::skew(foot_pos_body.block<3, 1>(0, i));
   }
 
   // Get Jacobian
   J.block<13, 13>(0, 0) = dfc_dx;
   J.block<13, 12>(0, 13) = dfc_du;
+}
+
+void QuadrupedTrotQuaternionModel::TrotDynamics(double *x_dot, const double *x, const double *u,
+                                                Eigen::Matrix<double, 3, 2> foot_pos_body,
+                                                const Eigen::Matrix3d& robot_inertia, double robot_mass) const {
+  Eigen::Map<Eigen::VectorXd> x_dot_vec(x_dot, 13);
+  Eigen::Map<const Eigen::VectorXd> x_vec(x, 13);
+  Eigen::Map<const Eigen::VectorXd> u_vec(u, 6);
+
+  Eigen::Vector3d g_vec;
+  g_vec << 0, 0, -9.81;
+  Eigen::Vector3d body_com(0.0223, 0.002, -0.0005);
+  Eigen::Vector3d moment_gravity = body_com.cross(5.204 * g_vec);
+
+  Eigen::Vector3d moment_body;
+  moment_body = altro::skew(foot_pos_body.block<3, 1>(0, 0)) * u_vec.segment<3>(0) +
+                altro::skew(foot_pos_body.block<3, 1>(0, 1)) * u_vec.segment<3>(3) +
+                moment_gravity;
+
+  // change rate of position
+  x_dot_vec.segment<3>(0) = x_vec.segment<3>(7);
+  // change rate of quaternion
+  x_dot_vec.segment<4>(3) = 0.5 * altro::G(x_vec.segment<4>(3)) * x_vec.segment<3>(10);
+  // change rate of linear velocity
+  x_dot_vec.segment<3>(7) = (u_vec.segment<3>(0) + u_vec.segment<3>(3)) / robot_mass + g_vec;
+  // change rate of angular velocity
+  // x_dot_vec.segment<3>(10) = robot_inertia.inverse() * (moment_body - x_vec.segment<3>(10).cross(robot_inertia * x_vec.segment<3>(10)));
+  x_dot_vec.segment<3>(10) = robot_inertia.inverse() * moment_body;
+}
+
+void QuadrupedTrotQuaternionModel::TrotJacobian(double *jac, const double *x, const double *u,
+                                                Eigen::Matrix<double, 3, 2> foot_pos_body,
+                                                const Eigen::Matrix3d& robot_inertia, double robot_mass) const {
+  (void)u;
+  Eigen::Map<Eigen::Matrix<double, 13, 19>> J(jac);  // jac = [dfc_dx, dfc_du]
+  J.setZero();
+
+  Eigen::Map<const Eigen::VectorXd> x_vec(x, 13);
+
+  // Calculate dfc_dx
+  Eigen::MatrixXd dfc_dx(13, 13);
+  dfc_dx.setZero();
+  // dv/dv
+  dfc_dx.block<3, 3>(0, 7) = Eigen::Matrix3d::Identity();
+  // dqdot/dq
+  dfc_dx.block<1, 3>(3, 4) = -0.5 * x_vec.segment<3>(10).transpose();
+  dfc_dx.block<3, 1>(4, 3) = 0.5 * x_vec.segment<3>(10);
+  dfc_dx.block<3, 3>(4, 4) = -0.5 * altro::skew(x_vec.segment<3>(10));
+  // dqdot/domega
+  dfc_dx(3, 10) = -0.5 * x_vec(4);  // -0.5qa
+  dfc_dx(3, 11) = -0.5 * x_vec(5);  // -0.5qb
+  dfc_dx(3, 12) = -0.5 * x_vec(6);  // -0.5qc
+  dfc_dx(4, 10) = 0.5 * x_vec(3);   // 0.5qs
+  dfc_dx(4, 11) = -0.5 * x_vec(6);  // -0.5qc
+  dfc_dx(4, 12) = 0.5 * x_vec(5);   // 0.5qb
+  dfc_dx(5, 10) = 0.5 * x_vec(6);   // 0.5qc
+  dfc_dx(5, 11) = 0.5 * x_vec(3);   // 0.5qs
+  dfc_dx(5, 12) = -0.5 * x_vec(4);  // -0.5qa
+  dfc_dx(6, 10) = -0.5 * x_vec(5);  // -0.5qb
+  dfc_dx(6, 11) = 0.5 * x_vec(4);   // 0.5qa
+  dfc_dx(6, 12) = 0.5 * x_vec(3);   // 0.5qs
+  // domegadot/domega
+//  dfc_dx.block<3, 3>(10, 10) = -robot_inertia.inverse() * (altro::skew(x_vec.segment<3>(10)) * robot_inertia -
+//                                                                           altro::skew(robot_inertia * x_vec.segment<3>(10)));
+
+  // Calculate dfc_du
+  Eigen::MatrixXd dfc_du(13, 6);
+  dfc_du.setZero();
+
+  for (int i = 0; i < 2; ++i) {
+    dfc_du.block<3, 3>(7, 3 * i) = (1 / robot_mass) * Eigen::Matrix3d::Identity();
+    dfc_du.block<3, 3>(10, 3 * i) = robot_inertia.inverse() * altro::skew(foot_pos_body.block<3, 1>(0, i));
+  }
+
+  // Get Jacobian
+  J.block<13, 13>(0, 0) = dfc_dx;
+  J.block<13, 6>(0, 13) = dfc_du;
 }
 
 Eigen::Vector4d Slerp(Eigen::Vector4d q1, Eigen::Vector4d q2, double t) {

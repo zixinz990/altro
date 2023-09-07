@@ -17,7 +17,6 @@ SolverImpl::SolverImpl(int N)
       nx_(N + 1, 0),
       nu_(N + 1, 0),
       nx_error_(N + 1, 0),
-      nu_error_(N + 1, 0),
       h_(N),
       opts(),
       stats(),
@@ -75,8 +74,7 @@ ErrorCodes SolverImpl::Initialize() {
   for (int k = 0; k < N; ++k) {
     nx_[k] = data_[k].GetStateDim();
     nu_[k] = data_[k].GetInputDim();
-    nx_error_[k] = data_[k].GetErrorStateDim();
-    nu_error_[k] = data_[k].GetErrorInputDim();
+    nx_error_[k] =  nx_[k] - 1;
     x_[k] = data_[k].x_.data();
     u_[k] = data_[k].u_.data();
     y_[k] = data_[k].y_.data();
@@ -113,7 +111,7 @@ ErrorCodes SolverImpl::Initialize() {
     Qu_tmp_[k] = data_[k].Qu_tmp_.data();
   }
   nx_[N] = data_[N].GetStateDim();
-  nx_error_[N] = data_[N].GetErrorStateDim();
+  nx_error_[N] = nx_[N] - 1;
   x_[N] = data_[N].x_.data();
   y_[N] = data_[N].y_.data();
   lxx_[N] = data_[N].lxx_.data();
@@ -413,7 +411,7 @@ ErrorCodes SolverImpl::BackwardPass() {
   bool is_diag = false;
   int res = 0;
   if (opts.use_quaternion) {
-    res = tvlqr_BackwardPass(nx_error_.data(), nu_error_.data(), N, error_A_.data(),
+    res = tvlqr_BackwardPass(nx_error_.data(), nu_.data(), N, error_A_.data(),
                              error_B_.data(), f_.data(), lxx_.data(), luu_.data(), lux_.data(),
                              lx_.data(), lu_.data(), reg, K_.data(), d_.data(), P_.data(),
                              p_.data(), delta_V_, Qxx_.data(), Quu_.data(), Qux_.data(), Qx_.data(),

@@ -30,7 +30,6 @@ class KnotPointData {
 
   // Setters
   ErrorCodes SetDimension(int num_states, int num_inputs);
-  ErrorCodes SetErrorDimension(int num_error_states, int num_error_inputs);
   ErrorCodes SetNextStateDimension(int num_states_next);
   ErrorCodes SetTimestep(float h);
 
@@ -94,10 +93,6 @@ class KnotPointData {
 
   int GetInputDim() const { return num_inputs_; }
 
-  int GetErrorStateDim() const { return num_error_states_; }
-
-  int GetErrorInputDim() const { return num_error_inputs_; }
-
   float GetTimeStep() const { return h_; }
 
   bool IsInitialized() const { return is_initialized_; }
@@ -121,8 +116,6 @@ class KnotPointData {
   int num_next_state_ = 0;
   int num_states_ = 0;
   int num_inputs_ = 0;
-  int num_error_states_ = 0;
-  int num_error_inputs_ = 0;
   float h_ = 0.0;
 
   // Cost function

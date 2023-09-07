@@ -76,15 +76,28 @@ class SimpleQuaternionModel {
 class QuadrupedQuaternionModel {
  public:
   void Dynamics(double *x_dot, const double *x, const double *u,
-                Eigen::Matrix<double, 3, 4> foot_pos_body, Eigen::Matrix3d inertia_body) const;
+                Eigen::Matrix<double, 3, 4> foot_pos_body,
+                const Eigen::Matrix3d& robot_inertia, double robot_mass) const;
   void Jacobian(double *jac, const double *x, const double *u,
-                Eigen::Matrix<double, 3, 4> foot_pos_body, Eigen::Matrix3d inertia_body) const;
+                Eigen::Matrix<double, 3, 4> foot_pos_body,
+                const Eigen::Matrix3d& robot_inertia, double robot_mass) const;
 
   static constexpr int NumStates = 13;  // r, q, v, w
   static constexpr int NumInputs = 12;  // f1, f2, f3, f4
 
-  static constexpr int NumErrorStates = 12;
-  static constexpr int NumErrorInputs = 12;
+};
+
+class QuadrupedTrotQuaternionModel{
+ public:
+  void TrotDynamics(double *x_dot, const double *x, const double *u,
+                    Eigen::Matrix<double, 3, 2> foot_pos_body,
+                    const Eigen::Matrix3d& robot_inertia, double robot_mass) const;
+  void TrotJacobian(double *jac, const double *x, const double *u,
+                    Eigen::Matrix<double, 3, 2> foot_pos_body,
+                    const Eigen::Matrix3d& robot_inertia, double robot_mass) const;
+
+  static constexpr int NumStates = 13;
+  static constexpr int NumInputs = 6;
 };
 
 void ReadScottyTrajectory(int *Nref, float *tref, std::vector<Eigen::Vector4d> *xref,
