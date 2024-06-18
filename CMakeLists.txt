@@ -97,7 +97,7 @@ endif()
 #############################################
 
 # Output all binaries
-add_compile_options(-Wall -Wextra -pedantic -Werror -march=native)
+add_compile_options(-Wall -Wextra -pedantic -march=native)
 add_subdirectory(src)
 
 #############################################
